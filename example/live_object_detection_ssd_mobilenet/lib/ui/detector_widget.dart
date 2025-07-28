@@ -84,6 +84,30 @@ class _DetectorWidgetState extends State<DetectorWidget>
       });
   }
 
+  void switchCamera() async {
+    // Switch to the next camera
+    final nextCameraIndex =
+        (cameras.indexOf(_controller.description) + 1) % cameras.length;
+    final nextCamera = cameras[nextCameraIndex];
+
+    // Stop the current controller
+    await _cameraController?.stopImageStream();
+    await _cameraController?.dispose();
+
+    // Create a new controller with the next camera
+    _cameraController = CameraController(
+      nextCamera,
+      ResolutionPreset.medium,
+      enableAudio: false,
+    );
+
+    // Initialize the new controller
+    await _cameraController!.initialize();
+    await _cameraController!.startImageStream(onLatestImageAvailable);
+
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     // Return empty container while the camera is not initialized
@@ -105,6 +129,15 @@ class _DetectorWidgetState extends State<DetectorWidget>
         AspectRatio(
           aspectRatio: aspect,
           child: _boundingBoxes(),
+        ),
+        // Floating action button to switch camera
+        Positioned(
+          bottom: 16,
+          right: 16,
+          child: FloatingActionButton(
+            onPressed: switchCamera,
+            child: const Icon(Icons.switch_camera),
+          ),
         ),
       ],
     );
