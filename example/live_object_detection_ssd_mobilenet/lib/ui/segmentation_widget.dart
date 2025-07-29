@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:live_object_detection_ssd_mobilenet/models/screen_params.dart';
 import 'package:live_object_detection_ssd_mobilenet/service/segmentation_process.dart';
 
+import '../utils/min_area_rectangle.dart';
+
 class SegmentationWidget extends StatelessWidget {
   final SegmentationProcess segmentationProcess;
-  const SegmentationWidget({super.key, required this.segmentationProcess});
+  final int cameraIndex;
+  const SegmentationWidget(
+      {super.key,
+      required this.segmentationProcess,
+      required this.cameraIndex});
 
   @override
   Widget build(BuildContext context) {
@@ -19,19 +25,8 @@ class SegmentationWidget extends StatelessWidget {
     final imageHeight = ScreenParams.screenPreviewSize.height;
     final offsetX = segmentationProcess.recognition.location.left * imageWidth;
     final offsetY = segmentationProcess.recognition.location.top * imageHeight;
-    // final boxWidth =
-    //     segmentationProcess.recognition.location.width * imageWidth;
-    // final boxHeight =
-    //     segmentationProcess.recognition.location.height * imageHeight;
-    var x = getX(mask);
-    final area = getArea(mask);
-    var y = getY(area, mask[0].length, mask.length, x);
-
-    if (area > .9 * mask.length * mask[0].length) {
-      x = 0;
-      y = mask.length.toDouble();
-    }
-
+    Rectangle rectangle =
+        minimumAreaRectangle(mask, imageWidth / 40, imageHeight / 40);
     return Transform.translate(
       offset: Offset(offsetX, offsetY),
       child: CustomPaint(
@@ -40,8 +35,8 @@ class SegmentationWidget extends StatelessWidget {
           color: color.withOpacity(0.5),
           width: imageWidth,
           height: imageHeight,
-          x: x.toDouble() * imageWidth / 40,
-          y: y.toDouble() * imageHeight / 40,
+          rectangle: rectangle,
+          cameraIndex: cameraIndex,
         ),
         child: Container(),
       ),
@@ -54,46 +49,77 @@ class _SegmentationMaskPainter extends CustomPainter {
   final Color color;
   final double width;
   final double height;
-  final double x;
-  final double y;
+  final Rectangle rectangle;
+  final int cameraIndex;
 
   _SegmentationMaskPainter(
       {required this.mask,
       required this.color,
       required this.width,
       required this.height,
-      required this.x,
-      required this.y});
+      required this.rectangle,
+      required this.cameraIndex});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = color;
-    final a = mask[0].length * width / 40;
-    final b = mask.length * height / 40;
-    if (x < 0 || y < 0 || x > a || y > b) {
-      var tmp = Paint()..color = Colors.black;
-      for (int y = 0; y < mask.length; y++) {
-        for (int x = 0; x < mask[y].length; x++) {
-          if (mask[y][x] > 0.5) {
-            // Threshold to determine if the pixel is part of the object
-            canvas.drawRect(
-              Rect.fromLTWH(x.toDouble() * width / 40,
-                  y.toDouble() * height / 40, width / 40, height / 40),
-              tmp,
-            );
-            tmp = paint;
-          }
-        }
-      }
+    // for (int y = 0; y < mask.length; y++) {
+    //   for (int x = 0; x < mask[y].length; x++) {
+    //     if (mask[y][x] > 0.5) {
+    //       // Threshold to determine if the pixel is part of the object
+    //       canvas.drawRect(
+    //         Rect.fromLTWH(x.toDouble() * width / 40, y.toDouble() * height / 40,
+    //             width / 40, height / 40),
+    //         paint,
+    //       );
+    //     }
+    //   }
+    // }
+    List<Point> hull = rectangle.corners;
+    double rectWidth = rectangle.width;
+    double rectHeight = rectangle.height;
+
+    if (isHorizontalOrVerticalRectangle(hull)) {
+      List<double> incX = [0, width / 40, width / 40, 0];
+      List<double> incY = [0, 0, height / 40, height / 40];
+      hull = hull.asMap().entries.map((entry) {
+        int i = entry.key;
+        Point point = entry.value;
+        return Point(point.x + incX[i], point.y + incY[i]);
+      }).toList();
+    }
+    // print(hull);
+    final path = Path()
+      ..addPolygon(
+          hull.map((point) => Offset(point.x, point.y)).toList(), true);
+    canvas.drawPath(path, paint);
+    // Draw rectangle width and height on the top right corner
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text:
+            'W: ${rectWidth.toStringAsFixed(1)}, H: ${rectHeight.toStringAsFixed(1)}',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          backgroundColor: Colors.black54,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+
+    // Flip horizontally if cameraIndex == 1
+    if (cameraIndex == 1) {
+      canvas.save();
+      // Flip vertically (mirror)
+      canvas.translate(0, size.height);
+      canvas.scale(1, -1);
+      // Paint text at the top left after flip (so it appears top right visually)
+      // Adjust position so text stays within canvas
+      textPainter.paint(canvas, Offset(0, size.height - textPainter.height));
+      canvas.restore();
     } else {
-      final path = Path()
-        ..addPolygon([
-          Offset(x, 0),
-          Offset(0, y),
-          Offset(a - x, b),
-          Offset(a, b - y),
-        ], true);
-      canvas.drawPath(path, paint);
+      textPainter.paint(canvas, const Offset(0, 0));
     }
   }
 
@@ -101,29 +127,31 @@ class _SegmentationMaskPainter extends CustomPainter {
   bool shouldRepaint(_SegmentationMaskPainter oldDelegate) => true;
 }
 
-int getX(List<List<num>> mask) {
-  for (int x = 0; x < mask.length; x++) {
-    for (int y = 0; y < mask[x].length; y++) {
-      if (mask[x][y] > 0.5) {
-        return y;
-      }
-    }
-  }
-  return -1; // Return -1 if no object is found
+Rectangle minimumAreaRectangle(
+    List<List<num>> mask, double scaleX, double scaleY) {
+  List<List<bool>> binaryMask =
+      mask.map((row) => row.map((e) => e > 0.5).toList()).toList();
+  return MinimumBoundingRectangle.findMinimumBoundingRectangle(
+      binaryMask, scaleX, scaleY);
 }
 
-int getArea(List<List<num>> mask) {
-  int area = 0;
-  for (int y = 0; y < mask.length; y++) {
-    for (int x = 0; x < mask[y].length; x++) {
-      if (mask[y][x] > 0.5) {
-        area++;
-      }
-    }
+bool isHorizontalOrVerticalRectangle(List<Point> hull) {
+  if (hull.length != 4) return false;
+  // Calculate the direction of each edge
+  List<Offset> edges = [];
+  for (int i = 0; i < 4; i++) {
+    final p1 = hull[i];
+    final p2 = hull[(i + 1) % 4];
+    edges.add(Offset(p2.x - p1.x, p2.y - p1.y));
   }
-  return area;
-}
-
-double getY(int area, int a, int b, int x) {
-  return (area - b * x).toDouble() / (a - 2 * x).toDouble();
+  // Check if all edges are either horizontal or vertical
+  bool allHorizontalOrVertical = edges.every((e) =>
+      (e.dx.abs() < 1e-3 && e.dy.abs() > 1e-3) ||
+      (e.dy.abs() < 1e-3 && e.dx.abs() > 1e-3));
+  if (allHorizontalOrVertical) {
+    // Rectangle is axis-aligned
+    // You can use this info as needed, e.g. print or set a flag
+    // print('Rectangle is completely horizontal or vertical');
+  }
+  return allHorizontalOrVertical;
 }

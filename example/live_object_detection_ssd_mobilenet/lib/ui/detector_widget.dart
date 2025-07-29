@@ -148,10 +148,10 @@ class _DetectorWidgetState extends State<DetectorWidget>
         // Stats
         _statsWidget(),
         // Bounding boxes
-        AspectRatio(
-          aspectRatio: aspect,
-          child: _boundingBoxes(cameraIndex),
-        ),
+        // AspectRatio(
+        //   aspectRatio: aspect,
+        //   child: _boundingBoxes(cameraIndex),
+        // ),
         AspectRatio(
             aspectRatio: aspect, child: _segmentationMasks(cameraIndex)),
       ],
@@ -205,7 +205,8 @@ class _DetectorWidgetState extends State<DetectorWidget>
           : Matrix4.identity(),
       child: Stack(
         children: segmentationProcesses!
-            .map((process) => SegmentationWidget(segmentationProcess: process))
+            .map((process) => SegmentationWidget(
+                segmentationProcess: process, cameraIndex: cameraIndex))
             .toList(),
       ),
     );
