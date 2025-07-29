@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:live_object_detection_ssd_mobilenet/models/recognition.dart';
 import 'package:live_object_detection_ssd_mobilenet/models/screen_params.dart';
 import 'package:live_object_detection_ssd_mobilenet/service/detector_service.dart';
+import 'package:live_object_detection_ssd_mobilenet/service/segmentation_process.dart';
 import 'package:live_object_detection_ssd_mobilenet/ui/box_widget.dart';
+import 'package:live_object_detection_ssd_mobilenet/ui/segmentation_widget.dart';
 import 'package:live_object_detection_ssd_mobilenet/ui/stats_widget.dart';
 
 /// [DetectorWidget] sends each frame for inference
@@ -38,6 +40,9 @@ class _DetectorWidgetState extends State<DetectorWidget>
   /// Results to draw bounding boxes
   List<Recognition>? results;
 
+  /// Segmentation processes to draw segmentation masks
+  List<SegmentationProcess>? segmentationProcesses;
+
   /// Realtime stats
   Map<String, String>? stats;
 
@@ -57,6 +62,7 @@ class _DetectorWidgetState extends State<DetectorWidget>
         _detector = instance;
         _subscription = instance.resultsStream.stream.listen((values) {
           setState(() {
+            segmentationProcesses = values['segmentation processes'];
             results = values['recognitions'];
             stats = values['stats'];
           });
@@ -101,6 +107,8 @@ class _DetectorWidgetState extends State<DetectorWidget>
       enableAudio: false,
     );
 
+    // ScreenParams.previewSize = _controller.value.previewSize!;
+
     // Initialize the new controller
     await _cameraController!.initialize();
     await _cameraController!.startImageStream(onLatestImageAvailable);
@@ -117,28 +125,35 @@ class _DetectorWidgetState extends State<DetectorWidget>
 
     var aspect = 1 / _controller.value.aspectRatio;
 
+    var cameraIndex = cameras.indexOf(_controller.description);
+
     return Stack(
       children: [
-        AspectRatio(
-          aspectRatio: aspect,
-          child: CameraPreview(_controller),
+        Stack(
+          children: [
+            AspectRatio(
+              aspectRatio: aspect,
+              child: CameraPreview(_controller),
+            ),
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: FloatingActionButton(
+                onPressed: switchCamera,
+                child: const Icon(Icons.switch_camera),
+              ),
+            ),
+          ],
         ),
         // Stats
         _statsWidget(),
         // Bounding boxes
         AspectRatio(
           aspectRatio: aspect,
-          child: _boundingBoxes(),
+          child: _boundingBoxes(cameraIndex),
         ),
-        // Floating action button to switch camera
-        Positioned(
-          bottom: 16,
-          right: 16,
-          child: FloatingActionButton(
-            onPressed: switchCamera,
-            child: const Icon(Icons.switch_camera),
-          ),
-        ),
+        AspectRatio(
+            aspectRatio: aspect, child: _segmentationMasks(cameraIndex)),
       ],
     );
   }
@@ -162,12 +177,38 @@ class _DetectorWidgetState extends State<DetectorWidget>
       : const SizedBox.shrink();
 
   /// Returns Stack of bounding boxes
-  Widget _boundingBoxes() {
+  Widget _boundingBoxes(int cameraIndex) {
     if (results == null) {
       return const SizedBox.shrink();
     }
-    return Stack(
-        children: results!.map((box) => BoxWidget(result: box)).toList());
+    // Flip horizontally if using the front camera (cameraIndex == 1)
+    return Transform(
+      alignment: Alignment.center,
+      transform: cameraIndex == 1
+          ? (Matrix4.identity()..scale(1.0, -1.0, 1.0))
+          : Matrix4.identity(),
+      child: Stack(
+        children: results!.map((box) => BoxWidget(result: box)).toList(),
+      ),
+    );
+  }
+
+  Widget _segmentationMasks(int cameraIndex) {
+    if (segmentationProcesses == null) {
+      return const SizedBox.shrink();
+    }
+    // Flip horizontally if using the front camera (cameraIndex == 1)
+    return Transform(
+      alignment: Alignment.center,
+      transform: cameraIndex == 1
+          ? (Matrix4.identity()..scale(1.0, -1.0, 1.0))
+          : Matrix4.identity(),
+      child: Stack(
+        children: segmentationProcesses!
+            .map((process) => SegmentationWidget(segmentationProcess: process))
+            .toList(),
+      ),
+    );
   }
 
   /// Callback to receive each frame [CameraImage] perform inference on it

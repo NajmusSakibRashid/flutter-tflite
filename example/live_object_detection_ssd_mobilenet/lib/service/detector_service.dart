@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as image_lib;
 import 'package:live_object_detection_ssd_mobilenet/models/recognition.dart';
+import 'package:live_object_detection_ssd_mobilenet/service/segmentation_process.dart';
 import 'package:live_object_detection_ssd_mobilenet/utils/image_utils.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
@@ -68,8 +69,8 @@ class _Command {
 /// are executed in a background isolate.
 /// This class just sends and receives messages to the isolate.
 class Detector {
-  static const String _modelPath = 'assets/models/ssd_mobilenet.tflite';
-  static const String _labelPath = 'assets/models/labelmap.txt';
+  static const String _modelPath = 'assets/models/100n_float16_160.tflite';
+  static const String _labelPath = 'assets/models/__labelmap.txt';
 
   Detector._(this._isolate, this._interpreter, this._labels);
 
@@ -171,8 +172,8 @@ class Detector {
 /// This is where we use the new feature Background Isolate Channels, which
 /// allows us to use plugins from background isolates.
 class _DetectorServer {
-  /// Input size of image (height = width = 300)
-  static const int mlModelInputSize = 300;
+  /// Input size of image (height = width = 160)
+  static const int mlModelInputSize = 160;
 
   /// Result confidence threshold
   static const double confidence = 0.5;
@@ -266,7 +267,11 @@ class _DetectorServer {
         imageInput.width,
         (x) {
           final pixel = imageInput.getPixel(x, y);
-          return [pixel.r, pixel.g, pixel.b];
+          return [
+            pixel.r.toDouble() / 255,
+            pixel.g.toDouble() / 255,
+            pixel.b.toDouble() / 255
+          ];
         },
       ),
     );
@@ -278,52 +283,93 @@ class _DetectorServer {
 
     final output = _runInference(imageMatrix);
 
-    // Location
-    final locationsRaw = output.first.first as List<List<double>>;
+    var inferenceElapsedTime =
+        DateTime.now().millisecondsSinceEpoch - inferenceTimeStart;
 
-    final List<Rect> locations = locationsRaw
-        .map((list) => list.map((value) => (value * mlModelInputSize)).toList())
-        .map((rect) => Rect.fromLTRB(rect[1], rect[0], rect[3], rect[2]))
-        .toList();
+    // Boxes
+    final boxesRaw = output.elementAt(0).first as List<List<double>>;
+    final x = boxesRaw[0];
+    final y = boxesRaw[1];
+    final width = boxesRaw[2];
+    final height = boxesRaw[3];
+    final confidences = boxesRaw[4];
 
-    // Classes
-    final classesRaw = output.elementAt(1).first as List<double>;
-    final classes = classesRaw.map((value) => value.toInt()).toList();
-
-    // Scores
-    final scores = output.elementAt(2).first as List<double>;
+    final List<Rect> locations = List.generate(
+      x.length,
+      (i) => Rect.fromLTWH(
+          x[i] - width[i] / 2, y[i] - height[i] / 2, width[i], height[i]),
+    );
 
     // Number of detections
-    final numberOfDetectionsRaw = output.last.first as double;
-    final numberOfDetections = numberOfDetectionsRaw.toInt();
+    final numberOfDetections = x.length;
 
     final List<String> classification = [];
     for (var i = 0; i < numberOfDetections; i++) {
-      classification.add(_labels![classes[i]]);
+      classification.add(_labels![0]);
     }
 
     /// Generate recognitions
     List<Recognition> recognitions = [];
     for (int i = 0; i < numberOfDetections; i++) {
       // Prediction score
-      var score = scores[i];
+      var score = confidences[i];
       // Label string
       var label = classification[i];
 
       if (score > confidence) {
+        print('Detected: $label with score: $score');
         recognitions.add(
           Recognition(i, label, score, locations[i]),
         );
       }
     }
 
-    var inferenceElapsedTime =
-        DateTime.now().millisecondsSinceEpoch - inferenceTimeStart;
+    recognitions.sort((a, b) => b.score.compareTo(a.score));
+
+    // Apply IOU threshold to filter overlapping recognitions
+    const double iouThreshold = 0.5;
+    List<Recognition> filteredRecognitions = [];
+
+    for (var rec in recognitions) {
+      bool shouldAdd = true;
+      for (var filtered in filteredRecognitions) {
+        final iou = _iou(rec.location, filtered.location);
+        if (iou > iouThreshold) {
+          shouldAdd = false;
+          break;
+        }
+      }
+      if (shouldAdd) {
+        filteredRecognitions.add(rec);
+      }
+    }
+    recognitions = filteredRecognitions;
+
+    // Segmentation mask
+    final rawMask = output.elementAt(1).first as List<List<List<num>>>;
+
+    List<SegmentationProcess> segmentationProcesses = [];
+    for (var rec in recognitions) {
+      // Coefficients for segmentation mask
+      final coEfficients = List<double>.generate(
+        32,
+        (index) => boxesRaw[5 + index][rec.id],
+      );
+
+      segmentationProcesses.add(
+        SegmentationProcess(
+          rawMask: rawMask,
+          coEfficients: coEfficients,
+          recognition: rec,
+        ),
+      );
+    }
 
     var totalElapsedTime =
         DateTime.now().millisecondsSinceEpoch - preConversionTime;
 
     return {
+      "segmentation processes": segmentationProcesses,
       "recognitions": recognitions,
       "stats": <String, String>{
         'Conversion time:': conversionElapsedTime.toString(),
@@ -348,13 +394,26 @@ class _DetectorServer {
     // Scores: [1, 10],
     // Number of detections: [1]
     final output = {
-      0: [List<List<num>>.filled(10, List<num>.filled(4, 0))],
-      1: [List<num>.filled(10, 0)],
-      2: [List<num>.filled(10, 0)],
-      3: [0.0],
+      0: [List<List<num>>.filled(37, List<num>.filled(525, 0))],
+      1: [
+        List<List<List<num>>>.filled(
+            40, List<List<num>>.filled(40, List<num>.filled(32, 0)))
+      ],
     };
 
     _interpreter!.runForMultipleInputs([input], output);
     return output.values.toList();
+  }
+
+  double area(Rect rect) {
+    return rect.width * rect.height;
+  }
+
+  double _iou(Rect location, Rect location2) {
+    final intersection = location.intersect(location2);
+    if (area(intersection) < 1e-6) return 0;
+
+    final union = area(location) + area(location2) - area(intersection);
+    return area(intersection) / union;
   }
 }

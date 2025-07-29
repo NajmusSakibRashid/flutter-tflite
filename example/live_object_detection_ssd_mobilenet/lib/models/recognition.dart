@@ -34,8 +34,8 @@ class Recognition {
   /// This is the actual location where rectangle is rendered on
   /// the screen
   Rect get renderLocation {
-    final double scaleX = ScreenParams.screenPreviewSize.width / 300;
-    final double scaleY = ScreenParams.screenPreviewSize.height / 300;
+    final double scaleX = ScreenParams.screenPreviewSize.width;
+    final double scaleY = ScreenParams.screenPreviewSize.height;
     return Rect.fromLTWH(
       location.left * scaleX,
       location.top * scaleY,
