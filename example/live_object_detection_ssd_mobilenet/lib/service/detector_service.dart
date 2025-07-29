@@ -317,7 +317,6 @@ class _DetectorServer {
       var label = classification[i];
 
       if (score > confidence) {
-        print('Detected: $label with score: $score');
         recognitions.add(
           Recognition(i, label, score, locations[i]),
         );
