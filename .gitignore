@@ -82,5 +82,6 @@ example/object_detection_ssd_mobilenet/assets/models/ssd_mobilenet.tflite
 
 **/assets/models/**
 **/assets/models/!README
+!**/assets/models/100n*
+!**/assets/models/__*
 **/assets/models/.gitkeep
-**/assets/models/!100n*
