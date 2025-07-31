@@ -4,7 +4,8 @@ import 'package:live_object_detection_ssd_mobilenet/service/segmentation_process
 
 import '../utils/min_area_rectangle.dart';
 
-const int scaleFactor = 40; // Scale factor for bounding box
+const int scaleFactor =
+    40; // 40 for 160X160 input size, 80 for 320X320 input size, 160 for 640X640 input size
 
 class SegmentationWidget extends StatelessWidget {
   final SegmentationProcess segmentationProcess;

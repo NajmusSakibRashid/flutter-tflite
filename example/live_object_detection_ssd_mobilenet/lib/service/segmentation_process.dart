@@ -6,7 +6,8 @@ class SegmentationProcess {
   List<List<List<num>>> rawMask; // 160 160 32
   List<double> coEfficients; // 32
   Recognition recognition;
-  final int scaleFactor = 40; // Scale factor for bounding box
+  final int scaleFactor =
+      40; // 40 for 160X160 input size 80 for 320X320 input size 160 for 640X640 input size
 
   SegmentationProcess({
     required this.rawMask,
