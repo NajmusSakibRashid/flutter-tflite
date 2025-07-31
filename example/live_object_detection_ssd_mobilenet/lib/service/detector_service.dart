@@ -70,7 +70,7 @@ class _Command {
 /// This class just sends and receives messages to the isolate.
 class Detector {
   static const String _modelPath =
-      'assets/models/100n_float16_160.tflite'; //change model path here
+      'assets/models/100n_float16_160.tflite'; //change model path here 160X160
   static const String _labelPath = 'assets/models/__labelmap.txt';
 
   Detector._(this._isolate, this._interpreter, this._labels);
@@ -185,7 +185,8 @@ class Detector {
 /// allows us to use plugins from background isolates.
 class _DetectorServer {
   /// Input size of image (height = width = 160)
-  static const int mlModelInputSize = 160;
+  static const int mlModelInputSize =
+      160; // change it to 320 or 640 for larger models
 
   /// Result confidence threshold
   static const double confidence = 0.5;
