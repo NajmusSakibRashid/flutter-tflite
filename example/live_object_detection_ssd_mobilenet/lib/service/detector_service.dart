@@ -69,7 +69,8 @@ class _Command {
 /// are executed in a background isolate.
 /// This class just sends and receives messages to the isolate.
 class Detector {
-  static const String _modelPath = 'assets/models/100n_float16_160.tflite';
+  static const String _modelPath =
+      'assets/models/100n_float16_160.tflite'; //change model path here
   static const String _labelPath = 'assets/models/__labelmap.txt';
 
   Detector._(this._isolate, this._interpreter, this._labels);
@@ -121,9 +122,9 @@ class Detector {
         _modelPath,
         options: interpreterOptions..threads = 1,
       );
-      debugPrint('Model loaded successfully');
-      print('Model input size: ${ret.getInputTensor(0).shape}');
-      print('Model output size: ${ret.getOutputTensor(0).shape}');
+      // debugPrint('Model loaded successfully');
+      // print('Model input size: ${ret.getInputTensor(0).shape}');
+      // print('Model output size: ${ret.getOutputTensor(0).shape}');
 
       return ret;
     } on Exception catch (e) {
@@ -305,7 +306,7 @@ class _DetectorServer {
     final height = boxesRaw[3];
     final confidences = boxesRaw[4];
 
-    print('BoxesRaw Shape: ${boxesRaw.length} X ${boxesRaw[0].length}');
+    // print('BoxesRaw Shape: ${boxesRaw.length} X ${boxesRaw[0].length}');
 
     final List<Rect> locations = List.generate(
       x.length,
@@ -360,8 +361,8 @@ class _DetectorServer {
     // Segmentation mask
     final rawMask = output.elementAt(1).first as List<List<List<num>>>;
 
-    print(
-        'RawMask Shape: ${rawMask.length} X ${rawMask[0].length} X ${rawMask[0][0].length}');
+    // print(
+    //     'RawMask Shape: ${rawMask.length} X ${rawMask[0].length} X ${rawMask[0][0].length}');
 
     List<SegmentationProcess> segmentationProcesses = [];
     for (var rec in recognitions) {
@@ -400,14 +401,9 @@ class _DetectorServer {
   List<List<Object>> _runInference(
     List<List<List<num>>> imageMatrix,
   ) {
-    // Set input tensor [1, 300, 300, 3]
     final input = [imageMatrix];
 
-    // Set output tensor
-    // Locations: [1, 10, 4]
-    // Classes: [1, 10],
-    // Scores: [1, 10],
-    // Number of detections: [1]
+    /**Uncomment for input size [1, 160, 160, 3] */
     final output = {
       0: [List<List<num>>.filled(37, List<num>.filled(525, 0))],
       1: [
@@ -415,6 +411,24 @@ class _DetectorServer {
             40, List<List<num>>.filled(40, List<num>.filled(32, 0)))
       ],
     };
+
+    /**Uncomment for input size [1, 320, 320, 3] */
+    // final output = {
+    //   0: [List<List<num>>.filled(37, List<num>.filled(2100, 0))],
+    //   1: [
+    //     List<List<List<num>>>.filled(
+    //         80, List<List<num>>.filled(80, List<num>.filled(32, 0)))
+    //   ],
+    // };
+
+    /**Uncomment for input size [1, 640, 640, 3] */
+    // final output = {
+    //   0: [List<List<num>>.filled(37, List<num>.filled(8400, 0))],
+    //   1: [
+    //     List<List<List<num>>>.filled(
+    //         160, List<List<num>>.filled(160, List<num>.filled(32, 0)))
+    //   ],
+    // };
 
     _interpreter!.runForMultipleInputs([input], output);
     return output.values.toList();

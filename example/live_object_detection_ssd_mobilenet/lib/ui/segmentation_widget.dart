@@ -4,6 +4,8 @@ import 'package:live_object_detection_ssd_mobilenet/service/segmentation_process
 
 import '../utils/min_area_rectangle.dart';
 
+const int scaleFactor = 40; // Scale factor for bounding box
+
 class SegmentationWidget extends StatelessWidget {
   final SegmentationProcess segmentationProcess;
   final int cameraIndex;
@@ -25,8 +27,8 @@ class SegmentationWidget extends StatelessWidget {
     final imageHeight = ScreenParams.screenPreviewSize.height;
     final offsetX = segmentationProcess.recognition.location.left * imageWidth;
     final offsetY = segmentationProcess.recognition.location.top * imageHeight;
-    Rectangle rectangle =
-        minimumAreaRectangle(mask, imageWidth / 40, imageHeight / 40);
+    Rectangle rectangle = minimumAreaRectangle(
+        mask, imageWidth / scaleFactor, imageHeight / scaleFactor);
     return Transform.translate(
       offset: Offset(offsetX, offsetY),
       child: CustomPaint(
@@ -68,8 +70,8 @@ class _SegmentationMaskPainter extends CustomPainter {
     //     if (mask[y][x] > 0.5) {
     //       // Threshold to determine if the pixel is part of the object
     //       canvas.drawRect(
-    //         Rect.fromLTWH(x.toDouble() * width / 40, y.toDouble() * height / 40,
-    //             width / 40, height / 40),
+    //         Rect.fromLTWH(x.toDouble() * width / scale_factor, y.toDouble() * height / scale_factor,
+    //             width / scale_factor, height / scale_factor),
     //         paint,
     //       );
     //     }
@@ -80,8 +82,8 @@ class _SegmentationMaskPainter extends CustomPainter {
     double rectHeight = rectangle.height;
 
     if (isHorizontalOrVerticalRectangle(hull)) {
-      List<double> incX = [0, width / 40, width / 40, 0];
-      List<double> incY = [0, 0, height / 40, height / 40];
+      List<double> incX = [0, width / scaleFactor, width / scaleFactor, 0];
+      List<double> incY = [0, 0, height / scaleFactor, height / scaleFactor];
       hull = hull.asMap().entries.map((entry) {
         int i = entry.key;
         Point point = entry.value;

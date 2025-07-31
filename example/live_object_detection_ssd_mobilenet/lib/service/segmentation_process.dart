@@ -6,6 +6,7 @@ class SegmentationProcess {
   List<List<List<num>>> rawMask; // 160 160 32
   List<double> coEfficients; // 32
   Recognition recognition;
+  final int scaleFactor = 40; // Scale factor for bounding box
 
   SegmentationProcess({
     required this.rawMask,
@@ -31,10 +32,10 @@ class SegmentationProcess {
       }
       mask.add(row);
     }
-    var xMin = recognition.location.left * 40;
-    var xMax = recognition.location.right * 40;
-    var yMin = recognition.location.top * 40;
-    var yMax = recognition.location.bottom * 40;
+    var xMin = recognition.location.left * scaleFactor;
+    var xMax = recognition.location.right * scaleFactor;
+    var yMin = recognition.location.top * scaleFactor;
+    var yMax = recognition.location.bottom * scaleFactor;
     // Crop the mask to the bounding box of the recognition
     mask = mask.sublist(yMin.toInt(), yMax.toInt()).map((row) {
       return row.sublist(xMin.toInt(), xMax.toInt());
