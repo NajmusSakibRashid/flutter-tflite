@@ -3,8 +3,8 @@ import 'dart:math';
 import 'package:live_object_detection_ssd_mobilenet/models/recognition.dart';
 
 class SegmentationProcess {
-  List<List<List<num>>> rawMask;
-  List<double> coEfficients;
+  List<List<List<num>>> rawMask; // 160 160 32
+  List<double> coEfficients; // 32
   Recognition recognition;
 
   SegmentationProcess({

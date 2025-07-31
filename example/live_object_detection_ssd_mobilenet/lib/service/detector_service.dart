@@ -114,10 +114,21 @@ class Detector {
       interpreterOptions.addDelegate(XNNPackDelegate());
     }
 
-    return Interpreter.fromAsset(
-      _modelPath,
-      options: interpreterOptions..threads = 4,
-    );
+    Interpreter ret;
+
+    try {
+      ret = await Interpreter.fromAsset(
+        _modelPath,
+        options: interpreterOptions..threads = 1,
+      );
+      debugPrint('Model loaded successfully');
+      print('Model input size: ${ret.getInputTensor(0).shape}');
+      print('Model output size: ${ret.getOutputTensor(0).shape}');
+
+      return ret;
+    } on Exception catch (e) {
+      throw Exception('Failed to load model: $e');
+    }
   }
 
   static Future<List<String>> _loadLabels() async {
@@ -294,6 +305,8 @@ class _DetectorServer {
     final height = boxesRaw[3];
     final confidences = boxesRaw[4];
 
+    print('BoxesRaw Shape: ${boxesRaw.length} X ${boxesRaw[0].length}');
+
     final List<Rect> locations = List.generate(
       x.length,
       (i) => Rect.fromLTWH(
@@ -346,6 +359,9 @@ class _DetectorServer {
 
     // Segmentation mask
     final rawMask = output.elementAt(1).first as List<List<List<num>>>;
+
+    print(
+        'RawMask Shape: ${rawMask.length} X ${rawMask[0].length} X ${rawMask[0][0].length}');
 
     List<SegmentationProcess> segmentationProcesses = [];
     for (var rec in recognitions) {
